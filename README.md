@@ -12,7 +12,7 @@ cp .env.example .env
 npm run dev
 ```
 
-Open http://127.0.0.1:5173. The Node backend listens on 3001. On first run, station discovery and 18-day backfill happen in the background; the UI reports progress and partial coverage. Full-network backfill makes approximately 2,000 paced requests and takes several minutes. SQLite persists in `data/zirimiri.sqlite`. No synthetic observations or automatic demo fallback are used.
+Open http://127.0.0.1:5173. The Node backend listens on 3001. On first run, station discovery and 18-day backfill happen in the background; the UI reports progress and partial coverage. Full-network backfill makes approximately 3,000 paced requests and usually takes 15–25 minutes, depending on the source. Unknown stations are probed through the history so temporarily missing gauges can still be discovered. SQLite persists in `data/zirimiri.sqlite`. No synthetic observations or automatic demo fallback are used.
 
 ```sh
 npm run ingest   # optional standalone ingestion (do not run alongside the server)
@@ -22,13 +22,15 @@ npm run build
 npm start       # serves the production build at http://127.0.0.1:3001
 ```
 
-Polling defaults to 30 minutes, with sequential requests at least 350 ms apart, retries and exponential backoff. Recent files refresh each poll; older retained days refresh daily to pick up corrections. `STATION_IDS=C029,C072` restricts ingestion for a quick smoke test; leave empty for full coverage. Stations stay visible after temporary data loss. HTTP 404 means an unavailable day, never zero rainfall.
+Polling defaults to 30 minutes, with sequential requests at least 350 ms apart, retries and exponential backoff. Today’s gauge files refresh each poll; yesterday refreshes every six hours and older retained days refresh daily to pick up corrections. `STATION_IDS=C029,C072` restricts ingestion for a quick smoke test; leave empty for full coverage. Stations stay visible after temporary data loss. HTTP 404 means an unavailable day, never zero rainfall.
 
 ## Data access and interpretation
 
 Read [the source investigation](docs/data-source.md) for real request examples, tested semantics, caveats and licensing. The working adapter reads the same public JSON files as Euskalmet's station viewer. The documented API requires RS256 credentials; its server-only token transport is included, but its different response format must be validated before switching sources. Keys must never be put in Vite environment variables or committed.
 
 The timeline is the last 14 elapsed days; storage retains 18 days to cover the earliest 48-hour sum. Windows are `[T-W,T)` in UTC, with labels in `Europe/Madrid`. A complete total requires every 10-minute slot to contain a finite non-negative source amount. All readings are provisional, not certified. Missing, invalid, future or ambiguous DST readings cannot contribute to a complete sum. Partial totals are never scaled.
+
+Rain activity dots mark 10-minute intervals when at least one gauge measured positive rain. Their size grows with the sum of the available station amounts and caps at 12 px diameter. This is a station-activity cue, not an areal rainfall estimate. Hover for times, wet-gauge count and coverage; click to select that interval's end. Missing readings contribute nothing, and no dot does not confirm dry weather. The keyboard timeline announces the same measured activity.
 
 ## Docker
 
@@ -52,3 +54,7 @@ OpenStreetMap standard tiles with visible attribution and browser caching are su
 - `tests/`: interval boundaries, missing/zero, corrections, DST and a manually checked real sample.
 
 Source attribution: Euskalmet / Basque Government. This independent app does not imply endorsement. Data availability and publication delays are shown in the UI.
+
+![zirimiri with factual station totals and capped rain activity dots](docs/screenshots/desktop.png)
+
+[Verification record](docs/verification.md) · [Mobile preview](docs/screenshots/mobile.png)

@@ -1,0 +1,17 @@
+services:
+  zirimiri:
+    build: .
+    ports:
+      - "3001:3001"
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3001
+      DATABASE_PATH: /app/data/zirimiri.sqlite
+      POLL_MINUTES: ${POLL_MINUTES:-30}
+      REQUEST_DELAY_MS: ${REQUEST_DELAY_MS:-350}
+      STATION_IDS: ${STATION_IDS:-}
+    volumes:
+      - observations:/app/data
+    restart: unless-stopped
+volumes:
+  observations:
