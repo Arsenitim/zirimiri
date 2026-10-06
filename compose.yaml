@@ -10,6 +10,8 @@ services:
       POLL_MINUTES: ${POLL_MINUTES:-30}
       REQUEST_DELAY_MS: ${REQUEST_DELAY_MS:-350}
       STATION_IDS: ${STATION_IDS:-}
+      RADAR_POLL_MINUTES: ${RADAR_POLL_MINUTES:-10}
+      RADAR_RETENTION_DAYS: ${RADAR_RETENTION_DAYS:-15}
     volumes:
       - observations:/app/data
     restart: unless-stopped

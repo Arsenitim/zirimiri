@@ -10,6 +10,7 @@ import {
   type Status,
   type RainActivity,
 } from "../shared/types";
+import type { RadarStatus } from "../shared/radar";
 export class Store {
   db: DatabaseSync;
   constructor(path: string) {
@@ -20,7 +21,8 @@ export class Store {
       CREATE TABLE IF NOT EXISTS observations(stationId TEXT NOT NULL, start INTEGER NOT NULL, mm REAL, quality TEXT NOT NULL, ingestedAt INTEGER NOT NULL, PRIMARY KEY(stationId,start));
       CREATE INDEX IF NOT EXISTS observation_time ON observations(start,stationId);
       CREATE TABLE IF NOT EXISTS fetched(stationId TEXT NOT NULL, day TEXT NOT NULL, fetchedAt INTEGER NOT NULL, status INTEGER NOT NULL, PRIMARY KEY(stationId,day));
-      CREATE TABLE IF NOT EXISTS metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL);`);
+      CREATE TABLE IF NOT EXISTS metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS radar_frames(product TEXT NOT NULL, slot INTEGER NOT NULL, png BLOB NOT NULL, sha256 TEXT NOT NULL, fetchedAt INTEGER NOT NULL, PRIMARY KEY(product,slot));`);
   }
   stations(eligibleOnly = false): Station[] {
     return this.db
@@ -166,6 +168,64 @@ export class Store {
           .get()!.n,
       ),
       serverTime: Date.now(),
+    };
+  }
+  // Archived frames are immutable: the source keeps only three relative days, so a
+  // later source change must never replace or erase what was already verified.
+  saveRadarFrame(
+    product: string,
+    slot: number,
+    png: Uint8Array,
+    sha256: string,
+    now = Date.now(),
+  ) {
+    return (
+      Number(
+        this.db
+          .prepare("INSERT OR IGNORE INTO radar_frames VALUES(?,?,?,?,?)")
+          .run(product, slot, png, sha256, now).changes,
+      ) > 0
+    );
+  }
+  hasRadarFrame(product: string, slot: number) {
+    return !!this.db
+      .prepare("SELECT 1 FROM radar_frames WHERE product=? AND slot=?")
+      .get(product, slot);
+  }
+  radarSlots(product: string, start: number, end: number): number[] {
+    return this.db
+      .prepare(
+        "SELECT slot FROM radar_frames WHERE product=? AND slot>=? AND slot<=? ORDER BY slot",
+      )
+      .all(product, start, end)
+      .map((r) => r.slot as number);
+  }
+  radarFrame(product: string, slot: number) {
+    const row = this.db
+      .prepare("SELECT png,sha256 FROM radar_frames WHERE product=? AND slot=?")
+      .get(product, slot);
+    return row
+      ? { png: row.png as Uint8Array, sha256: row.sha256 as string }
+      : null;
+  }
+  pruneRadar(days: number, now = Date.now()) {
+    this.db
+      .prepare("DELETE FROM radar_frames WHERE slot<?")
+      .run(now - days * 86400000);
+  }
+  radarStatus(product: string): RadarStatus {
+    const row = this.db
+      .prepare(
+        "SELECT COUNT(*) AS n,MIN(slot) AS oldest,MAX(slot) AS newest FROM radar_frames WHERE product=?",
+      )
+      .get(product)!;
+    return {
+      frames: Number(row.n),
+      oldestFrame: row.oldest as number | null,
+      newestFrame: row.newest as number | null,
+      lastAttempt: this.get("radarLastAttempt", null),
+      lastSuccess: this.get("radarLastSuccess", null),
+      lastError: this.get("radarLastError", null),
     };
   }
 }

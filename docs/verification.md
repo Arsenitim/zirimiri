@@ -11,4 +11,13 @@ Checked locally on 2026-10-05 using real public Euskalmet observations, never UI
 - Rain activity: 582 real rainy intervals rendered, maximum dot radius 6 px on desktop and mobile; clicking the last dot selected 2026-10-05 13:50 CEST, and its tooltip showed 0.1 mm across one wet gauge with 101/101 gauges available. Badge removal verified in the rendered DOM.
 - Docker Compose configuration validates. Container runtime was not tested because the local Docker daemon is stopped.
 
+## Radar overlay (2026-10-06)
+
+- 26 Node tests pass, including 6 radar tests: PNG validation (filters, size, corners, truncation), frame selection limits, UTC slot names, three-day archive with stop at the newest unpublished slot, immutability and retention, and refusal to archive when `today` has not rolled over.
+- The frame validator, run on 72 real downloaded files, accepted all 63 real frames and rejected all 9 placeholders, also without the placeholder hash.
+- Live first run at 16:4x UTC archived 386 frames (2026-10-04 00:00 to 2026-10-06 16:10 UTC) with no gaps or errors: 4.9 MB, mean 13 KB per frame.
+- Chrome desktop: the 18:00 CEST frame rendered at 60% opacity in its pane (z-index 350) beneath the gauge marker pane (600). Opacity slider, toggle and remembered settings work. "Latest" shows the 18:10 CEST frame labelled 30 min before window end. 22 Sept shows "No radar frame within 60 min" with no image.
+- Chrome 390 × 844 emulation: document width 390 px, legend with radar controls fits.
+- Not observed: actual folder behaviour at 00:00 UTC rollover (guarded, see radar-source.md).
+
 SQLite cache and raw investigation files are local and ignored by Git. The only committed observation sample is explicitly isolated in `tests/fixtures` and never served as fallback data. Source-specific limitations, provisional quality and DST ambiguity are recorded in [data-source.md](data-source.md).

@@ -30,6 +30,12 @@ Read [the source investigation](docs/data-source.md) for real request examples, 
 
 The timeline is the last 14 elapsed days; storage retains 18 days to cover the earliest 48-hour sum. Windows are `[T-W,T)` in UTC, with labels in `Europe/Madrid`. A complete total requires every 10-minute slot to contain a finite non-negative source amount. All readings are provisional, not certified. Missing, invalid, future or ambiguous DST readings cannot contribute to a complete sum. Partial totals are never scaled.
 
+## Radar overlay
+
+The map can show Euskalmet's Kapildui radar rain-rate estimate as a semi-transparent layer under the gauge circles. The timeline shows the newest frame at or before the selected time, up to 60 minutes older, and labels its time. Use the legend checkbox to turn it on or off and the slider to set opacity; both are remembered in the browser. The radar is a remote-sensing estimate shown in Euskalmet's five qualitative classes. It is never summed, interpolated or used to adjust gauge values.
+
+Euskalmet publishes only about three days of frames under relative `today`/`yesterday` folders, so the server archives every new frame to SQLite as it appears (polling every 10 minutes). History grows beyond three days only while the server runs; 15 days are kept by default (`RADAR_RETENTION_DAYS`). Placeholder "no data" images are rejected. See [the radar investigation](docs/radar-source.md).
+
 Rain activity dots mark 10-minute intervals when at least one gauge measured positive rain. Their size grows with the sum of the available station amounts and caps at 12 px diameter. This is a station-activity cue, not an areal rainfall estimate. Hover for times, wet-gauge count and coverage; click to select that interval's end. Missing readings contribute nothing, and no dot does not confirm dry weather. The keyboard timeline announces the same measured activity.
 
 ## Docker
@@ -48,6 +54,7 @@ OpenStreetMap standard tiles with visible attribution and browser caching are su
 
 - `server/source.ts`: verified viewer adapter, strict parsing, optional authenticated API transport.
 - `server/ingestion.ts`: discovery, incremental fetches, retries and retention.
+- `server/radar.ts`: radar frame validation and archiving.
 - `server/store.ts`: SQLite transactions and indexed observations; station/day replacement allows corrections and withdrawals.
 - `shared/`: UTC accumulation and timezone conversion.
 - `src/`: React + Leaflet UI.

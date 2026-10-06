@@ -5,7 +5,13 @@ import "leaflet/dist/leaflet.css";
 import "./style.css";
 import { RainActivityTrack } from "./RainActivity";
 import { rainColor, RAIN_LEGEND } from "../shared/rain-scale";
-import { formatTime, timelineEnd } from "../shared/time";
+import { formatClock, formatTime, timelineEnd } from "../shared/time";
+import {
+  RADAR_BOUNDS,
+  RADAR_LEGEND,
+  frameAt,
+  type RadarIndex,
+} from "../shared/radar";
 import {
   STEP,
   type Snapshot,
@@ -16,6 +22,23 @@ import {
 const PRESETS = [10, 30, 60, 180, 360, 720, 1440, 2880];
 const durationLabel = (m: number) =>
   m < 60 ? `${m} min` : `${m / 60} ${m === 60 ? "hour" : "hours"}`;
+// Per-viewer display preferences only; the page works when storage is unavailable.
+function stored<T>(key: string, fallback: T): T {
+  try {
+    const value = localStorage.getItem(key);
+    return value === null ? fallback : (JSON.parse(value) as T);
+  } catch {
+    return fallback;
+  }
+}
+function remember(key: string, value: unknown) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    /* Preference is kept for this session only. */
+  }
+}
+const radarUrl = (slot: number) => `/api/radar/frames/${slot}.png`;
 const mm = (n: number | null) =>
   n === null ? "—" : n.toLocaleString("en-GB", { maximumFractionDigits: 2 });
 const stateLabel = (s: StationTotal) =>
@@ -46,9 +69,16 @@ function App() {
     [chartLoading, setChartLoading] = useState(false);
   const [refresh, setRefresh] = useState(0),
     [tileError, setTileError] = useState(false);
+  const [radar, setRadar] = useState<RadarIndex | null>(null),
+    [radarError, setRadarError] = useState(""),
+    [radarOn, setRadarOn] = useState(() => stored("radarOn", true)),
+    [radarOpacity, setRadarOpacity] = useState(() =>
+      Math.min(1, Math.max(0.1, Number(stored("radarOpacity", 0.6)) || 0.6)),
+    );
   const mapRef = useRef<HTMLDivElement>(null),
     map = useRef<L.Map | null>(null),
     markerGroup = useRef<L.LayerGroup | null>(null),
+    radarLayer = useRef<L.ImageOverlay | null>(null),
     initialTime = useRef(true);
   const min = anchor - 14 * 86400000;
   useEffect(() => {
@@ -67,6 +97,22 @@ function App() {
           setActivity(null);
           setActivityError("Rain activity unavailable");
         }
+      });
+    return () => controller.abort();
+  }, [anchor, refresh]);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/api/radar", { signal: controller.signal })
+      .then((r) => {
+        if (!r.ok) throw new Error("Radar archive unavailable");
+        return r.json();
+      })
+      .then((data: RadarIndex) => {
+        setRadar(data);
+        setRadarError("");
+      })
+      .catch((e) => {
+        if (e.name !== "AbortError") setRadarError("Radar archive unavailable");
       });
     return () => controller.abort();
   }, [anchor, refresh]);
@@ -154,6 +200,11 @@ function App() {
     )
       .on("tileerror", () => setTileError(true))
       .addTo(m);
+    // Radar sits above the base map but below the overlay (400) and marker (600)
+    // panes, so precipitation circles are always drawn on top of it.
+    const radarPane = m.createPane("radar");
+    radarPane.style.zIndex = "350";
+    radarPane.style.pointerEvents = "none";
     markerGroup.current = L.layerGroup().addTo(m);
     const observer = new ResizeObserver(() => m.invalidateSize());
     observer.observe(mapRef.current);
@@ -161,8 +212,34 @@ function App() {
       observer.disconnect();
       m.remove();
       map.current = null;
+      radarLayer.current = null;
     };
   }, []);
+  const radarFrame = radar ? frameAt(radar.frames, end) : null;
+  useEffect(() => {
+    const m = map.current;
+    if (!m) return;
+    if (!radarOn || radarFrame === null) {
+      radarLayer.current?.remove();
+      radarLayer.current = null;
+      return;
+    }
+    if (radarLayer.current) radarLayer.current.setUrl(radarUrl(radarFrame));
+    else
+      radarLayer.current = L.imageOverlay(radarUrl(radarFrame), RADAR_BOUNDS, {
+        pane: "radar",
+        opacity: radarOpacity,
+        interactive: false,
+        attribution: "Radar: Euskalmet Kapildui",
+      }).addTo(m);
+    // Warm the cache for the next frames so playback does not flash empty.
+    if (playing && radar)
+      for (const slot of radar.frames.filter((f) => f > end).slice(0, 3))
+        new Image().src = radarUrl(slot);
+  }, [radarOn, radarFrame, playing]);
+  useEffect(() => {
+    radarLayer.current?.setOpacity(radarOpacity);
+  }, [radarOpacity]);
   useEffect(() => {
     const group = markerGroup.current;
     if (!group || !snapshot) return;
@@ -244,6 +321,17 @@ function App() {
   }
   const status = snapshot?.status;
   const activityAtEnd = activity?.find((point) => point.end === end);
+  const radarCaption = radarError
+    ? radarError
+    : !radar
+      ? "Loading radar archive…"
+      : !radar.frames.length
+        ? radar.status.lastError
+          ? `No radar frames yet · ${radar.status.lastError}`
+          : "No radar frames archived yet"
+        : radarFrame === null
+          ? "No radar frame within 60 min of this time"
+          : `Frame ${formatClock(radarFrame)}${end > radarFrame ? ` · ${Math.round((end - radarFrame) / 60000)} min before window end` : ""}`;
   return (
     <main>
       <header>
@@ -346,6 +434,52 @@ function App() {
             </span>
           </div>
           <small>0 = confirmed zero · rings flag data age</small>
+          <div className="radar-legend">
+            <div className="radar-toggle">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={radarOn}
+                  onChange={(e) => {
+                    setRadarOn(e.target.checked);
+                    remember("radarOn", e.target.checked);
+                  }}
+                />
+                <strong>Radar</strong> <span>rain rate</span>
+              </label>
+              <input
+                type="range"
+                aria-label="Radar overlay opacity"
+                min="0.1"
+                max="1"
+                step="0.05"
+                value={radarOpacity}
+                disabled={!radarOn}
+                onChange={(e) => {
+                  setRadarOpacity(Number(e.target.value));
+                  remember("radarOpacity", Number(e.target.value));
+                }}
+              />
+              <output>{Math.round(radarOpacity * 100)}%</output>
+            </div>
+            {radarOn && (
+              <>
+                <div className="radar-scale" aria-hidden="true">
+                  {RADAR_LEGEND.map(({ label, colors }) => (
+                    <div key={label}>
+                      <i
+                        style={{
+                          background: `linear-gradient(to right, ${colors.join(", ")})`,
+                        }}
+                      />
+                      <span>{label}</span>
+                    </div>
+                  ))}
+                </div>
+                <small role="status">{radarCaption}</small>
+              </>
+            )}
+          </div>
         </div>
         {tileError && (
           <div className="tile-warning">
@@ -648,7 +782,10 @@ function App() {
         ) : (
           <span>Waiting for source status…</span>
         )}
-        <span>No spatial interpolation · provisional data</span>
+        <span>
+          Gauges: no spatial interpolation · provisional data · Radar: Euskalmet
+          Kapildui estimate
+        </span>
       </footer>
     </main>
   );

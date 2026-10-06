@@ -4,12 +4,15 @@ import { resolve } from "node:path";
 import { existsSync } from "node:fs";
 import { Store } from "./store";
 import { Ingestion } from "./ingestion";
+import { RadarIngestion } from "./radar";
 import { accumulate, validateWindow } from "../shared/accumulation";
 import { STEP } from "../shared/types";
 import { timelineEnd } from "../shared/time";
+import { RADAR_BOUNDS, RADAR_PRODUCT, type RadarIndex } from "../shared/radar";
 const app = express(),
   store = new Store(process.env.DATABASE_PATH || "data/zirimiri.sqlite"),
-  ingestion = new Ingestion(store);
+  ingestion = new Ingestion(store),
+  radar = new RadarIngestion(store);
 app.disable("x-powered-by");
 app.get("/api/status", (_req, res) =>
   res.json(store.status(ingestion.running)),
@@ -78,6 +81,33 @@ app.get("/api/stations/:id/observations", (req, res) => {
     intervalMs: STEP,
   });
 });
+app.get("/api/radar", (_req, res) => {
+  const end = timelineEnd(),
+    start = end - 14 * 86400000;
+  res.json({
+    product: RADAR_PRODUCT,
+    bounds: RADAR_BOUNDS,
+    start,
+    end,
+    frames: store.radarSlots(RADAR_PRODUCT, start, end),
+    status: store.radarStatus(RADAR_PRODUCT),
+  } satisfies RadarIndex);
+});
+app.get("/api/radar/frames/:file", (req, res) => {
+  const slot = Number(/^(\d+)\.png$/.exec(req.params.file)?.[1]);
+  const frame = Number.isSafeInteger(slot)
+    ? store.radarFrame(RADAR_PRODUCT, slot)
+    : null;
+  if (!frame) return res.status(404).json({ error: "No archived radar frame" });
+  // Archived frames never change, so browsers may cache them indefinitely.
+  res
+    .set({
+      "Content-Type": "image/png",
+      "Cache-Control": "public, max-age=31536000, immutable",
+      ETag: `"${frame.sha256}"`,
+    })
+    .send(Buffer.from(frame.png));
+});
 if (existsSync("dist/index.html")) {
   app.use(express.static(resolve("dist")));
   app.get("/{*path}", (_req, res) => res.sendFile(resolve("dist/index.html")));
@@ -90,4 +120,7 @@ app.listen(
       "zirimiri server listening on port " + (process.env.PORT || 3001),
     ),
 );
-if (process.env.INGEST_ON_START !== "false") ingestion.start();
+if (process.env.INGEST_ON_START !== "false") {
+  ingestion.start();
+  radar.start();
+}

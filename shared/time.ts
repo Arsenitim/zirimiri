@@ -5,6 +5,10 @@ export function formatTime(ms: number) {
   const dt = DateTime.fromMillis(ms, { zone: ZONE, locale: "en-GB" });
   return `${dt.toFormat("dd LLL yyyy · HH:mm")} ${dt.isInDST ? "CEST" : "CET"}`;
 }
+export function formatClock(ms: number) {
+  const dt = DateTime.fromMillis(ms, { zone: ZONE });
+  return `${dt.toFormat("HH:mm")} ${dt.isInDST ? "CEST" : "CET"}`;
+}
 export function dayKey(ms: number) {
   return DateTime.fromMillis(ms, { zone: ZONE }).toISODate()!;
 }

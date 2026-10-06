@@ -11,11 +11,32 @@ export class SourceError extends Error {
     super(message);
   }
 }
+// Shared by station and radar ingestion so all Euskalmet requests are paced together.
 let nextRequest = 0;
-export async function requestJson(
+export function requestJson(url: string, auth?: string): Promise<unknown> {
+  return request(
+    url,
+    async (r) => {
+      const bytes = await r.arrayBuffer();
+      let text: string;
+      try {
+        text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+      } catch {
+        text = new TextDecoder("windows-1252").decode(bytes);
+      }
+      return JSON.parse(text);
+    },
+    auth,
+  );
+}
+export function requestBytes(url: string): Promise<Uint8Array> {
+  return request(url, async (r) => new Uint8Array(await r.arrayBuffer()));
+}
+async function request<T>(
   url: string,
+  read: (r: Response) => Promise<T>,
   auth?: string,
-): Promise<unknown> {
+): Promise<T> {
   const delay = Math.max(250, Number(process.env.REQUEST_DELAY_MS) || 350);
   await new Promise((r) =>
     setTimeout(r, Math.max(0, nextRequest - Date.now())),
@@ -32,15 +53,7 @@ export async function requestJson(
       });
       if (!r.ok)
         throw new SourceError(r.status, `Euskalmet returned HTTP ${r.status}`);
-      const bytes = await r.arrayBuffer();
-      let body = new TextDecoder("utf-8", { fatal: true });
-      let text: string;
-      try {
-        text = body.decode(bytes);
-      } catch {
-        text = new TextDecoder("windows-1252").decode(bytes);
-      }
-      return JSON.parse(text);
+      return await read(r);
     } catch (e) {
       if (e instanceof SourceError && e.status < 500 && e.status !== 429)
         throw e;
