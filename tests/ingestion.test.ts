@@ -82,3 +82,74 @@ test("source errors retain cached measurements and report failed ingestion witho
   assert.equal(store.status().running, false);
   store.db.close();
 });
+
+test("manual refresh bypasses today's cache, skips history, and shares a persisted minute limit", async () => {
+  const realNow = Date.now;
+  let now = Date.UTC(2026, 9, 7, 12);
+  Date.now = () => now;
+  const store = new Store(":memory:");
+  try {
+    const station = {
+      id: "test",
+      name: "Station",
+      municipality: "Bilbao",
+      province: "Bizkaia",
+      lat: 43,
+      lon: -3,
+      elevation: 10,
+      sensorHeight: 1,
+      sensorId: "rain",
+      eligible: true,
+    };
+    store.saveStation(station);
+    store.set("inventoryAt", now);
+    const today = DateTime.fromMillis(now, {
+      zone: "Europe/Madrid",
+    }).toISODate()!;
+    store.markFetched(station.id, today, 200, now);
+    const requested: string[] = [];
+    const source: SourceAdapter = {
+      inventory: async () => [station],
+      day: async (_id, day) => {
+        requested.push(day);
+        return {};
+      },
+    };
+    const ingestion = new Ingestion(store, source);
+    ingestion.running = true;
+    assert.equal((await ingestion.refresh()).reason, "running");
+    ingestion.running = false;
+    assert.equal((await ingestion.refresh()).accepted, true);
+    assert.deepEqual(requested, [today]);
+    const another = new Ingestion(store, source);
+    now += 59_999;
+    assert.equal((await another.refresh()).reason, "cooldown");
+    assert.equal(requested.length, 1);
+    now += 1;
+    assert.equal((await another.refresh()).accepted, true);
+    assert.deepEqual(requested, [today, today]);
+  } finally {
+    store.db.close();
+    Date.now = realNow;
+  }
+});
+
+test("concurrent manual refreshes cannot start duplicate source polls", async () => {
+  const store = new Store(":memory:");
+  let finish!: (stations: []) => void;
+  const ingestion = new Ingestion(store, {
+    inventory: () =>
+      new Promise<[]>((resolve) => {
+        finish = resolve;
+      }),
+    day: async () => ({}),
+  });
+  try {
+    const first = ingestion.refresh();
+    assert.equal((await ingestion.refresh()).accepted, false);
+    finish([]);
+    assert.equal((await first).accepted, true);
+  } finally {
+    store.db.close();
+  }
+});

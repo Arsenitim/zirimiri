@@ -80,6 +80,55 @@ function App() {
     markerGroup = useRef<L.LayerGroup | null>(null),
     radarLayer = useRef<L.ImageOverlay | null>(null),
     initialTime = useRef(true);
+  const [legendOpen, setLegendOpen] = useState(false);
+  const [controlsOpen, setControlsOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [retryAt, setRetryAt] = useState(0);
+  const [clock, setClock] = useState(Date.now);
+  const [refreshMessage, setRefreshMessage] = useState("");
+  const refreshPending = useRef(false);
+  useEffect(() => {
+    const timer = setInterval(() => setClock(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  async function refreshSource() {
+    if (refreshPending.current || Date.now() < retryAt) return;
+    refreshPending.current = true;
+    setRefreshing(true);
+    setRefreshMessage("");
+    try {
+      const response = await fetch("/api/refresh", { method: "POST" });
+      const result = await response.json();
+      setRetryAt(result.retryAt || 0);
+      if (!response.ok) {
+        throw new Error(
+          response.status === 429
+            ? "Please wait before refreshing again."
+            : response.status === 409
+              ? "A source poll is already running."
+              : "Could not refresh source data.",
+        );
+      }
+      const next = timelineEnd();
+      setPlaying(false);
+      setAnchor(next);
+      setEnd(Math.min(next, result.status.newestMeasurement ?? next));
+      setRefreshMessage(
+        result.status.errors
+          ? `Source refresh failed: ${result.status.lastError}`
+          : "Source checked. Latest available readings shown.",
+      );
+    } catch (e) {
+      setRefreshMessage(
+        e instanceof Error ? e.message : "Could not refresh source data.",
+      );
+    } finally {
+      setRefresh((r) => r + 1);
+      refreshPending.current = false;
+      setRefreshing(false);
+    }
+  }
+  const cooldown = Math.max(0, Math.ceil((retryAt - clock) / 1000));
   const min = anchor - 14 * 86400000;
   useEffect(() => {
     const controller = new AbortController();
@@ -344,6 +393,17 @@ function App() {
         <div className="header-note">
           <span className="live-dot" /> Euskalmet station observations
         </div>
+        <button
+          className="refresh-data"
+          onClick={refreshSource}
+          disabled={refreshing || cooldown > 0 || status?.running}
+        >
+          {refreshing
+            ? "Refreshing…"
+            : cooldown > 0
+              ? `Refresh in ${cooldown}s`
+              : "Refresh data"}
+        </button>
         <a
           className="about"
           href="https://github.com/Arsenitim/zirimiri/blob/main/docs/data-source.md"
@@ -410,7 +470,18 @@ function App() {
           </strong>{" "}
           complete in this window {loading && <small>· updating</small>}
         </div>
-        <div className="legend">
+        <button
+          className="mobile-toggle legend-toggle"
+          aria-expanded={legendOpen}
+          aria-controls="map-legend"
+          onClick={() => setLegendOpen(!legendOpen)}
+        >
+          {legendOpen ? "Hide legend" : "Legend & radar"}
+        </button>
+        <div
+          id="map-legend"
+          className={`legend ${legendOpen ? "mobile-open" : ""}`}
+        >
           <strong>
             Accumulated rain <span>mm</span>
           </strong>
@@ -604,7 +675,23 @@ function App() {
           </div>
         )}
       </section>
-      <section className="controls" aria-label="Historical rainfall controls">
+      <div className="mobile-toolbar">
+        <span>
+          {durationLabel(minutes)} · {formatClock(end)}
+        </span>
+        <button
+          aria-expanded={controlsOpen}
+          aria-controls="history-controls"
+          onClick={() => setControlsOpen(!controlsOpen)}
+        >
+          {controlsOpen ? "Hide history" : "Time & duration"}
+        </button>
+      </div>
+      <section
+        id="history-controls"
+        className={`controls ${controlsOpen ? "mobile-open" : ""}`}
+        aria-label="Historical rainfall controls"
+      >
         <div className="window-control">
           <label htmlFor="window">ROLLING ACCUMULATION</label>
           <select
@@ -754,7 +841,12 @@ function App() {
           </div>
         </div>
       </section>
-      <footer aria-live="polite">
+      {refreshMessage && (
+        <div className="refresh-message" role="status">
+          {refreshMessage}
+        </div>
+      )}
+      <footer aria-live="polite" className={controlsOpen ? "mobile-open" : ""}>
         {error ? (
           <div className="source-error" role="alert">
             Server error: {error}{" "}

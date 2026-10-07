@@ -13,7 +13,18 @@ export class Ingestion {
     public store: Store,
     private source: SourceAdapter = new ViewerSource(),
   ) {}
-  async run() {
+  async refresh() {
+    const now = Date.now();
+    const retryAt = this.store.get("manualRefreshAt", 0) + 60_000;
+    if (now < retryAt) return { accepted: false, retryAt, reason: "cooldown" };
+    if (this.running)
+      return { accepted: false, retryAt: now, reason: "running" };
+    // Persist before starting requests so all viewers share the same limit.
+    this.store.set("manualRefreshAt", now);
+    await this.run(true);
+    return { accepted: true, retryAt: now + 60_000 };
+  }
+  async run(currentOnly = false) {
     if (this.running) return;
     this.running = true;
     this.store.set("lastAttempt", Date.now());
@@ -62,7 +73,7 @@ export class Ingestion {
         }
       }
       // Day-first: make every gauge visible before completing the two-week backfill.
-      for (let offset = 0; offset <= 17; offset++) {
+      for (let offset = 0; offset <= (currentOnly ? 0 : 17); offset++) {
         const day = runDay.minus({ days: offset }).toISODate()!;
         for (const station of stations) {
           const previous = this.store.fetchedAt(station.id, day);
@@ -85,6 +96,7 @@ export class Ingestion {
           const fetchedBeforeDayFinished =
             previous && offset > 0 && previous.fetchedAt < dayEnd;
           if (
+            !currentOnly &&
             previous &&
             !fetchedBeforeDayFinished &&
             Date.now() - previous.fetchedAt < ttl

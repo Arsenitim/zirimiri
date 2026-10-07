@@ -22,6 +22,8 @@ npm run build
 npm start       # serves the production build at http://127.0.0.1:3001
 ```
 
+On mobile, the legend/radar panel and historical controls start collapsed; use “Legend & radar” and “Time & duration” to open them. “Refresh data” fetches today’s station files from Euskalmet and jumps to the latest available measured interval. Manual refreshes share a server-wide one-minute cooldown, persisted across restarts, and cannot overlap background ingestion. Source publication delays still apply; radar retains its independent polling schedule.
+
 Polling defaults to 30 minutes, with sequential requests at least 350 ms apart, retries and exponential backoff. Today’s gauge files refresh each poll; yesterday refreshes every six hours and older retained days refresh daily to pick up corrections. `STATION_IDS=C029,C072` restricts ingestion for a quick smoke test; leave empty for full coverage. Stations stay visible after temporary data loss. HTTP 404 means an unavailable day, never zero rainfall.
 
 ## Data access and interpretation

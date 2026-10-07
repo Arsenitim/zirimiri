@@ -17,6 +17,18 @@ app.disable("x-powered-by");
 app.get("/api/status", (_req, res) =>
   res.json(store.status(ingestion.running)),
 );
+app.post("/api/refresh", async (_req, res) => {
+  const result = await ingestion.refresh();
+  if (!result.accepted) {
+    if (result.reason === "cooldown")
+      res.set(
+        "Retry-After",
+        String(Math.ceil((result.retryAt - Date.now()) / 1000)),
+      );
+    return res.status(result.reason === "cooldown" ? 429 : 409).json(result);
+  }
+  res.json({ ...result, status: store.status(ingestion.running) });
+});
 app.get("/api/activity", (req, res) => {
   const end = Number(req.query.end || timelineEnd());
   if (
