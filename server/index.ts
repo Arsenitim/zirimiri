@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import { resolve } from "node:path";
 import { existsSync } from "node:fs";
+import { AvametIngestion } from "./avamet";
 import { Store } from "./store";
 import { Ingestion } from "./ingestion";
 import { RadarIngestion } from "./radar";
@@ -13,7 +14,11 @@ const app = express(),
   store = new Store(process.env.DATABASE_PATH || "data/zirimiri.sqlite"),
   ingestion = new Ingestion(store),
   radar = new RadarIngestion(store);
+const avamet = new AvametIngestion(
+  new Store(process.env.AVAMET_DATABASE_PATH || "data/avamet.sqlite"),
+);
 app.disable("x-powered-by");
+app.get("/api/regions/valencia", (_req, res) => res.json(avamet.snapshot()));
 app.get("/api/status", (_req, res) =>
   res.json(store.status(ingestion.running)),
 );
@@ -133,6 +138,7 @@ app.listen(
     ),
 );
 if (process.env.INGEST_ON_START !== "false") {
+  avamet.start();
   ingestion.start();
   radar.start();
 }

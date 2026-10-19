@@ -67,3 +67,9 @@ Source attribution: Euskalmet / Basque Government. This independent app does not
 ![zirimiri with factual station totals and capped rain activity dots](docs/screenshots/desktop.png)
 
 [Verification record](docs/verification.md) · [Mobile preview](docs/screenshots/mobile.png)
+
+## Experimental Valencian Community coverage
+
+Use the region selector to switch from the default Bilbao view to Valencia, Alicante and Castellón. The AVAMET adapter fetches one public network viewer page every 30 minutes and persists its last verified snapshot in `data/avamet.sqlite` (`AVAMET_DATABASE_PATH` overrides the path). No credentials are required for this daily-counter prototype.
+
+Valencia displays measured rain **since local midnight through each station's reporting time**, with missing and stale readings explicit. Rolling windows and timeline playback are unavailable for this source because interval semantics and public interval history have not been verified. Bilbao retains its existing windows, timeline and radar. AVAMET attribution and its CC BY-NC-ND 4.0 licence are visible; commercial reuse and derived products must not be assumed authorised. See [the endpoint investigation, reuse conditions and limitations](docs/avamet-source.md).

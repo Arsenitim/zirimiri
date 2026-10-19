@@ -1,3 +1,4 @@
+import { Valencia } from "./Valencia";
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import L from "leaflet";
@@ -964,4 +965,34 @@ function RainChart({
     </div>
   );
 }
-createRoot(document.getElementById("root")!).render(<App />);
+function Regions() {
+  const [region, setRegion] = useState("bilbao");
+  return (
+    <>
+      <nav className="region-selector" aria-label="Rainfall region">
+        <label htmlFor="region">Region </label>
+        <select
+          id="region"
+          value={region}
+          onChange={(e) => setRegion(e.target.value)}
+        >
+          <option value="bilbao">Bilbao / Basque Country</option>
+          <option value="valencia">Valencia · experimental</option>
+        </select>
+      </nav>
+      {region === "bilbao" ? (
+        <App />
+      ) : (
+        <main>
+          <header>
+            <a className="brand" href="/">
+              zirimiri <small>drizzle, measured.</small>
+            </a>
+          </header>
+          <Valencia />
+        </main>
+      )}
+    </>
+  );
+}
+createRoot(document.getElementById("root")!).render(<Regions />);
