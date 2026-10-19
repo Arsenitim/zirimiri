@@ -2,7 +2,7 @@ import { DateTime } from "luxon";
 import type { Station, StationTotal, Status } from "../shared/types";
 import { Store } from "./store";
 
-export const AVAMET_URL = "https://www.avamet.org/mxo-meteoxarxaonline.html";
+export const AVAMET_URL = "https://www.avamet.org/mxo-mxo.php?territori=pv";
 export interface AvametGauge extends Station {
   dailyMm: number | null;
   measuredAt: number | null;

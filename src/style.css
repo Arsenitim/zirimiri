@@ -1157,3 +1157,48 @@ footer .status-warning,
 .avamet-notice {
   flex-shrink: 0;
 }
+
+.avamet-history {
+  margin: 20px 0;
+  border-top: 1px solid #d4ded5;
+  padding-top: 8px;
+}
+.avamet-history h3 {
+  line-height: 1.5;
+}
+.avamet-history > label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  margin-top: 12px;
+}
+.avamet-history > input[type="range"] {
+  width: 100%;
+  margin: 12px 0;
+}
+.avamet-history-controls {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0;
+}
+.avamet-history-controls label {
+  font-size: 11px;
+  font-weight: 700;
+}
+.avamet-history-controls select {
+  padding: 8px;
+}
+.avamet-history-controls input {
+  width: 90px;
+  padding: 8px;
+}
+.avamet-time-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.avamet-time-actions button {
+  font-size: 11px;
+  padding: 8px;
+}

@@ -1,3 +1,4 @@
+import { AvametHistory, HistoryRateLimit } from "./avamet-history";
 import "dotenv/config";
 import express from "express";
 import { resolve } from "node:path";
@@ -17,6 +18,30 @@ const app = express(),
 const avamet = new AvametIngestion(
   new Store(process.env.AVAMET_DATABASE_PATH || "data/avamet.sqlite"),
 );
+const avametHistory = new AvametHistory(avamet.store);
+const knownAvametGauge = (id: string) =>
+  avamet.snapshot().stations.some((s) => s.id === id);
+app.get("/api/regions/valencia/stations/:id/history", (req, res) => {
+  if (!knownAvametGauge(req.params.id))
+    return res.status(404).json({ error: "Unknown AVAMET station" });
+  res.json(avametHistory.read(req.params.id));
+});
+app.post("/api/regions/valencia/stations/:id/history", async (req, res) => {
+  if (!knownAvametGauge(req.params.id))
+    return res.status(404).json({ error: "Unknown AVAMET station" });
+  try {
+    res.json(await avametHistory.load(req.params.id));
+  } catch (e) {
+    if (e instanceof HistoryRateLimit) {
+      res.set(
+        "Retry-After",
+        String(Math.max(1, Math.ceil((e.retryAt - Date.now()) / 1000))),
+      );
+      return res.status(429).json({ error: e.message, retryAt: e.retryAt });
+    }
+    res.status(502).json({ error: (e as Error).message });
+  }
+});
 app.disable("x-powered-by");
 app.get("/api/regions/valencia", (_req, res) => res.json(avamet.snapshot()));
 app.get("/api/status", (_req, res) =>

@@ -1,3 +1,4 @@
+import { AvametStationHistory } from "./AvametStationHistory";
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import type { AvametGauge } from "../server/avamet";
@@ -108,9 +109,8 @@ export function Valencia() {
     <>
       <div className="avamet-notice" role="status">
         <strong>Valencia · experimental · AVAMET</strong> — Daily measured rain
-        since local midnight, up to each station’s reporting time. No rolling
-        sums or historical playback: verified interval history is unavailable.
-        Missing ≠ zero.
+        since local midnight, up to each station’s reporting time. Select a
+        gauge for recent history and rolling sums. Missing ≠ zero.
       </div>
       <section
         className="map-area"
@@ -186,6 +186,7 @@ export function Valencia() {
                   : `${selected.elevation} m`}
               </dd>
             </dl>
+            <AvametStationHistory key={selected.id} stationId={selected.id} />
             <a
               href={`https://www.avamet.org/mxo_i.php?id=${selected.id.replace("avamet:", "")}`}
               target="_blank"
