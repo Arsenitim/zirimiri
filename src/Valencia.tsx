@@ -67,13 +67,31 @@ export function Valencia() {
     const layer = group.current!;
     layer.clearLayers();
     for (const s of gauges) {
-      const marker = L.circleMarker([s.lat, s.lon], {
-        radius: 7,
-        color: s.stale ? "#666" : "#133e36",
-        weight: s.stale ? 3 : 1,
-        dashArray: s.stale ? "3 3" : undefined,
-        fillOpacity: 0.85,
-        fillColor: s.dailyMm === null ? "#ddd" : rainColor(s.dailyMm),
+      const n = s.dailyMm;
+      const value =
+        n === null
+          ? "×"
+          : n.toLocaleString("en-GB", { maximumFractionDigits: 2 });
+      const size = n === null ? 22 : Math.min(44, 22 + Math.sqrt(n) * 3);
+      const button = document.createElement("button");
+      button.className = `station-marker ${n === null ? "none" : n === 0 ? "zero" : "rain"}${s.stale ? " stale" : ""}`;
+      button.style.width = `${size}px`;
+      button.style.height = `${size}px`;
+      button.style.background = n === null ? "#f0f1ed" : rainColor(n);
+      button.style.color = n !== null && n >= 5 ? "white" : "#133e36";
+      button.textContent = value;
+      button.setAttribute(
+        "aria-label",
+        `${s.name}: ${n === null ? "no measured total" : `${value} millimetres since local midnight`}${s.stale ? "; stale" : ""}`,
+      );
+      const marker = L.marker([s.lat, s.lon], {
+        keyboard: false,
+        icon: L.divIcon({
+          className: "station-marker-wrap",
+          iconSize: [size, size],
+          iconAnchor: [size / 2, size / 2],
+          html: button,
+        }),
       });
       const label = document.createElement("span");
       label.textContent = `${s.name} · ${s.id} · ${s.dailyMm === null ? "No data" : s.dailyMm + " mm since local midnight"}${s.stale ? " · stale" : ""}`;
@@ -121,7 +139,7 @@ export function Valencia() {
             ))}
           </div>
           <small>
-            Grey = missing · dashed ring = older than 1h
+            × = missing · 0 = measured zero · ring = older than 1h
             <br />
             Daily zero applies only up to the reporting time.
           </small>
